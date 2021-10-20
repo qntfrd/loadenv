@@ -63,9 +63,6 @@ type JoiEnv = {
 } | JoiJsonSchema
 ```
 
-The conversion from Json to Joi is managed by [json-joi](https://npmjs.com/json-joi)
-
-
 ## Q & A
 
 ### Why is this different than [dotenv](https://npmjs.com/dotenv) ?
