@@ -1,11 +1,11 @@
-# loadenv
+# Joienv
 
 load your environment in a config file
 
 ## Getting started
 
 ```ts
-import loadEnv from "loadenv";
+import loadEnv from "joienv";
 
 const schema = {
   port: { env: "PORT", type: number, port: true },

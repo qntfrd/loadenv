@@ -1,5 +1,5 @@
 {
-  "name": "loadenv",
+  "name": "joienv",
   "version": "0.0.1",
   "description": "✅ Load your environment in a config file",
   "main": "dist/index.js",
@@ -18,7 +18,8 @@
     "env",
     "setup",
     "config",
-    "environment"
+    "environment",
+    "joi"
   ],
   "author": "",
   "license": "ISC",
