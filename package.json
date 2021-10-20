@@ -1,0 +1,43 @@
+{
+  "name": "loadenv",
+  "version": "0.0.0",
+  "description": "✅ Load your environment in a config file",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "prepublish": "tsc",
+    "test": "mocha -r ts-node/register test/**/*.ts",
+    "test:cover": "nyc npm test",
+    "test:watch": "npm test -- -w --watch-files test/**/*.ts,src/**/*.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/k4ntin/loadenv.git"
+  },
+  "keywords": [
+    "env",
+    "setup",
+    "config",
+    "environment"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/k4ntin/loadenv/issues"
+  },
+  "homepage": "https://github.com/k4ntin/loadenv#readme",
+  "devDependencies": {
+    "@types/chai": "^4.2.22",
+    "@types/joi": "^17.2.3",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^16.11.1",
+    "chai": "^4.3.4",
+    "mocha": "^9.1.3",
+    "nyc": "^15.1.0",
+    "ts-node": "^10.3.0",
+    "typescript": "^4.4.4"
+  },
+  "dependencies": {
+    "joi": "^17.4.2"
+  }
+}
