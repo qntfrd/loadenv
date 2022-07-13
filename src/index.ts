@@ -1,90 +1,130 @@
 import Joi from "joi"
 
-type JsonJoiBasicType = string | boolean | number
-
-type JsonJoi = {
-  type?: "string"|"number"|"boolean"
-  required?: boolean
-  optional?: boolean
-  trim?: boolean
-  default?: JsonJoiBasicType | null
-  valid?: Array<JsonJoiBasicType>
+type CustomSchema = {
+  [key: string]: Joi.Schema | string | RegExp | Schema
 }
 
-type JoiEnv = {
-  env: string
-} & JsonJoi
+type Schema = CustomSchema|Joi.Schema
 
-type Schema<T> = Record<keyof T, string | JoiEnv | {[ key: string ]: Schema<T[keyof T]>}>
-
-const convertJson2JoiString = (jsonSchema: JsonJoi): Joi.StringSchema => {
-  let schema = Joi.string()
-
-  if (jsonSchema.trim === true)
-    schema = schema.trim()
-
-  return schema
+const inferKeyValueFromObjKey = (key: string): { key: string, value: unknown } => {
+  if (process.env[key] !== undefined)
+    return { key, value: process.env[key] }
+  if (process.env[key.toUpperCase()] !== undefined)
+    return { key: key.toUpperCase(), value: process.env[key.toUpperCase()] }
+  if (process.env[key.toLowerCase()] !== undefined)
+    return { key: key.toLowerCase(), value: process.env[key.toLowerCase()] }
+  return { key, value: undefined }
 }
 
-const convertJson2Joi = (jsonSchema: JsonJoi): Joi.Schema => {
-  let schema = jsonSchema.type === "number"
-    ? Joi.number()
-    : jsonSchema.type === "boolean"
-    ? Joi.boolean()
-    : convertJson2JoiString(jsonSchema)
-
-  if (jsonSchema.required !== false)
-    schema = schema.required()
-  if (jsonSchema.optional === true)
-    schema = schema.optional()
-
-  if (Array.isArray(jsonSchema.valid))
-    schema = schema.valid(...jsonSchema.valid)
-
-  if (jsonSchema.default !== undefined)
-    schema = schema.default(jsonSchema.default).optional()
-
-  return schema
+const inferKeyValueFromSchema = (key: string, joi: Joi.Schema): { key: string, value: unknown } => {
+  const desc = joi.describe()
+  if (desc.tags && desc.tags.length)
+    return { key: desc.tags[0], value: process.env[desc.tags[0]] }
+  return inferKeyValueFromObjKey(key)
 }
 
-const build = <T>(schema: Schema<T>): [ Joi.ObjectSchema, Record<keyof T, string> ] => {
-  const joiObject = new Map<keyof T, Joi.Schema>()
-  const envValues = new Map<keyof T, string | {[ key: string ]: string }>()
+const overrideLabelIfPossible = (joi: Joi.Schema, label: string): Joi.Schema => {
+  const desc = joi.describe()
+  if ((desc.flags as any)?.label) return joi
+  return joi.label(label)
+}
 
-  for (const key in schema) {
-    if (typeof schema[key] === 'string') {
-      joiObject.set(key, Joi.string().required().label(schema[key] as string))
-      if (process.env[schema[key] as string] !== undefined)
-        envValues.set(key, process.env[schema[key] as string] as string)
+const parseJoiSchema = (schema: Joi.Schema): { joi: Joi.Schema, env: Record<string, unknown> } => {
+  const env: [string, unknown][] = []
+
+  if (schema.type === "object") {
+    schema.$_terms.keys = schema.$_terms.keys.map((term: any) => {
+      const { key, schema: s } = term
+      const { key: k, value: v } = inferKeyValueFromSchema(key, s)
+      term.schema = overrideLabelIfPossible(s, k)
+
+      if (s.type === "object") {
+        const { env: e } = parseJoiSchema(s)
+        env.push([k, e])
+      }
+      else {
+        env.push([key, v])
+      }
+
+      return term
+    })
+
+    return { joi: schema, env: Object.fromEntries(env) }
+  }
+  else {
+    const { key: k, value: v } = inferKeyValueFromSchema("__THIS$CANNOT$EXIST__", schema)
+    if (k === "__THIS$CANNOT$EXIST__") throw new Error("Cannot infer environment variable name from schema, use object or .tag")
+    return { joi: Joi.object({ [k]: overrideLabelIfPossible(schema, k) }), env: { [k]: v } }
+  }
+}
+
+const parseCustomSchema = (schema: CustomSchema): { joi: Joi.Schema, env: Record<string, unknown> } => {
+  const joi: [string, Joi.Schema][] = []
+  const env: [string, unknown][] = []
+
+  Object.entries(schema).forEach(([key, value]) => {
+    if (typeof value === "string" && value[0] === "?") {
+      joi.push([
+        key,
+        Joi.string()
+           .allow("")
+           .empty("")
+           .optional()
+           .label(value.slice(1))
+      ])
+      env.push([key, process.env[value.slice(1)]])
     }
-    else if (schema[key].hasOwnProperty("env")) {
-      joiObject.set(key, convertJson2Joi({...(schema[key] as JoiEnv) }).label((schema[key] as JoiEnv).env))
-      if (process.env[(schema[key] as JoiEnv).env] !== undefined)
-        envValues.set(key, process.env[(schema[key] as JoiEnv).env] as string)
+    else if (typeof value === "string") {
+      joi.push([key, Joi.string().required().label(value)])
+      env.push([key, process.env[value]])
+    }
+    else if (value instanceof RegExp) {
+      const { key: k, value: v} = inferKeyValueFromObjKey(key)
+      joi.push([key, Joi.string().required().regex(value).label(k)])
+      env.push([key, v])
+    }
+    else if (Joi.isSchema(value)) {
+      const desc = value.describe()
+      if (desc.type === "object") {
+        const { joi: j, env: e } = parseSchema(value)
+        joi.push([key, j])
+        env.push([key, e])
+      }
+      else {
+        const { key: k, value: v } = inferKeyValueFromSchema(key, value)
+        joi.push([key, overrideLabelIfPossible(value, k)])
+        env.push([key, v])
+      }
     }
     else {
-      const [ nestedJoi, nestedEnv ] = build<Extract<typeof schema[typeof key], string | JoiEnv>>(schema[key] as any)
-      joiObject.set(key, nestedJoi)
-      envValues.set(key, nestedEnv)
+      const { joi: j, env: e } = parseSchema(value)
+      joi.push([key, j])
+      env.push([key, e])
     }
-  }
-
-  return [
-    Joi.object(Object.fromEntries(joiObject.entries())),
-    Object.fromEntries(envValues.entries()) as Record<keyof T, string>,
-  ]
-}
-
-export default function LoadEnv<T>(schema: Schema<T>): T {
-  const [ joiSchema, envValue ] = build<T>(schema)
-
-  const { value, error } = joiSchema.validate(envValue, {
-    abortEarly: false,
-    stripUnknown: true,
   })
 
-  if (error)
-    throw new Error(`Invalid environment:\n\t${error.details.map(e => e.message).join("\n\t")}`)
-
-  return value
+  return { joi: Joi.object(Object.fromEntries(joi)), env: Object.fromEntries(env) }
 }
+
+const parseSchema = (schema: Schema): { joi: Joi.Schema, env: Record<string, unknown> } =>
+  Joi.isSchema(schema)
+    ? parseJoiSchema(schema)
+    : parseCustomSchema(schema)
+
+const JoiEnv = <T extends Object>(schema: Schema): T => {
+  const { joi, env } = parseSchema(schema)
+
+  const { value, error } = joi.validate(env, {
+      abortEarly: false
+    })
+
+  if (error) {
+    const errors = error.details.map(e => e.message)
+    error.message = `Some environment variables are missing:\n\t${errors.join("\n\t")}`
+    throw error
+  }
+
+  return value as T
+}
+
+export default JoiEnv

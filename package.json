@@ -6,9 +6,10 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "prepublish": "tsc",
-    "test": "mocha -r ts-node/register test/**/*.ts",
+    "test": "mocha -r ts-node/register 'src/**/*.test.ts'",
     "test:cover": "nyc npm test",
-    "test:watch": "npm test -- -w --watch-files test/**/*.ts,src/**/*.ts"
+    "test:watch": "npm test -- -w --watch-files 'src/**/*.ts'",
+    "test:cover:watch": "nyc npm run test:watch"
   },
   "repository": {
     "type": "git",
@@ -38,7 +39,7 @@
     "ts-node": "10.3.0",
     "typescript": "4.4.4"
   },
-  "dependencies": {
-    "joi": "^17.4.2"
+  "peerDependencies": {
+    "joi": "^17.6.0"
   }
 }
