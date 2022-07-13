@@ -1,46 +1,52 @@
 # Joienv
 
-load your environment in a config file
+Loads and validate your environement variables using Joi
 
-## Getting started
+
+# TL;DR
 
 ```ts
-import loadEnv from "joienv";
+import JoiEnv from "joienv"
+import Joi from "joi"
 
-const schema = {
-  port: { env: "PORT", type: number, port: true },
-  env:  "ENV",
-  pg: {
-    host: "DB_HOST",
-    user: "DB_USER",
-    pass: "DB_PASS",
+type Config = {
+  misc: {
+    baseUrl: string,
+    env: string,
+    port: number,
+  },
+  mongo: {
+    connectionString: string,
+    db?: string
+  },
+}
+
+const Schema = {
+  misc: {
+    port: Joi.number().port(), // will read `process.env.port ?? process.env.PORT`
+                               // and validate it against this rule
+    baseUrl: "BASE_URL", // will validate against `process.env.BASE_URL,
+                         // `Joi.string().required().tag("BASE_URL")
+    env: /^(dev|staging|prod)$/, // will validate `process.env.env ?? process.env.ENV`
+                                 // against this regex
+  },
+  mongo: {
+    cs: Joi.string().required()
+           .uri({ scheme: ["mongodb", "mongodb+srv"] }) // validate agains this rule
+           .tag("MONGODB_URI"), // check for this env var `process.env.MONGODB_URI`
+    db: "?MONGODB_DB" // Will convert in `Joi.string().optional().tag("MONGODB_DB")
   }
 }
 
-interface Config {
-  port: number;
-  env: string;
-  pg: {
-    host: string;
-    user: string;
-    pass: string;
-  }
-}
-
-const config = loadenv<Config>(schema)
+const config = JoiEnv<Config>(Schema)
 ```
 
-Notes:
-- One can create the config object that one wants, loadenv will follow it
-- Each key is mapped to an environment variable named after the value
-  (i.e. `{ port: "PORT" }` will return `{ port: process.env.PORT }`)
-- The configuration can be nested
-- If you do not want to nest, but use [joi](https://joi.dev) validation and
-  coercion instead, use the `{env: "ENV_NAME"}` to denote the environment
-  variable to load, and the rest of the object keys will be for joi
-  (e.g. `{ foo: "FOO" }` &equiv; `{ foo: { env: "FOO" }}` &rArr; `{ foo: process.env.FOO }`)
-- If any environment variable is undefinded, or invalid (e.g. port is < 0),
-  loadenv will throw, with a human readable error message
+**NB**
+- JoiEnv will use the env var as a label, unless specified otherwise
+- JoiEnv will first test for the tag OR then the key, then key uppercase and finnaly key lowercase:
+  `tag ? process.env[tag] : process.env[key] ?? process.env[key.toUpperCase()] ?? process.env[key.toLowerCase()]`
+- You can wrap nested objects in `Joi.object()` for better control
+
 
 ## API
 
@@ -54,14 +60,15 @@ Loads & validate your environment, and returns it as the object you want
 type Config = {
   [key: string]:
       string // Takes the environment variable
+    | RegExp // Validation object by joi
     | Config // Nested configutaion object
-    | JoiEnv // Validation object by joi
+    | Joi.Schema // Joi schema object
 }
-
-type JoiEnv = {
-  env: string // The name of the environment variable
-} | JoiJsonSchema
 ```
+
+**NB**
+- when using a string, you can prefix it with a `?` to make it optional (e.g. `?FOO`)
+
 
 ## Q & A
 
