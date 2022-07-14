@@ -1,6 +1,6 @@
 {
   "name": "joienv",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "✅ Load your environment in a config file",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,5 +42,7 @@
   "peerDependencies": {
     "joi": "^17.6.0"
   },
-  "files": ["dist/**/*"]
+  "files": [
+    "dist/**/*"
+  ]
 }
